@@ -1,23 +1,23 @@
 resources:
   - name: build_alpine_ci_repo
     type: gitRepo
-    integration: drship_github  #replace with your Github integration, if needed
+    integration: github-manishas  #replace with your Github integration, if needed
     pointer:
-      sourceName: "devops-recipes/build_alpine_ci_image"  #org name/repository name
+      sourceName: "manishas/build_alpine_ci_image"  #org name/repository name
       branch: master
 
   - name: build_alpine_ci_img_dh
     type: image
-    integration: drship_dockerhub # replace with your integration name
+    integration: manishas-dh # replace with your integration name
     versionTemplate:
-      sourceName: "devopsrecipes/build_alpine_ci" # replace with your Hub URL
+      sourceName: "manishas/build_alpine_ci" # replace with your Hub URL
       versionName: latest
 
   - name: build_docker_ci_img_dh
     type: image
-    integration: drship_dockerhub # replace with your integration name
+    integration: manishas-dh # replace with your integration name
     versionTemplate:
-      sourceName: "devopsrecipes/build_docker_ci" # replace with your Hub URL
+      sourceName: "manishas/build_docker_ci" # replace with your Hub URL
       versionName: latest
 
 jobs:
@@ -39,14 +39,14 @@ jobs:
             - DH_PASS=$(shipctl get_integration_resource_field "$RES_OUT_IMG" "password")
             - DH_URL=$(shipctl get_integration_resource_field "$RES_OUT_IMG" "url")
             - pushd $(shipctl get_resource_state "build_alpine_ci_repo")
-            - docker build -t=$IMG_NAME:$BUILD_NUMBER -f Dockerfile.alpine37 --pull .
+            - docker build -f Dockerfile.alpine37 --pull .
             - docker login -u $DH_USR_NAME -p $DH_PASS
-            - docker push $IMG_NAME:$BUILD_NUMBER
+            - docker push $IMG_NAME:latest
       - OUT: build_alpine_ci_img_dh
     on_success:
       script:
         # Update OUT resource to create a new version that will trigger rest of the workflow
-        - shipctl put_resource_state_multi "$RES_OUT_IMG" "versionName=$BUILD_NUMBER"
+        - shipctl put_resource_state_multi "$RES_OUT_IMG" "versionName=latest"
     flags:
       - alpine_ci_img
       - ci
@@ -56,32 +56,11 @@ jobs:
     steps:
       - IN: build_alpine_ci_img_dh
       - TASK:
-          name: set_env
-          runtime:
-            container: false
-          script:
-# this is very hacky as its hardcoding the boot script location.
-# we need to create a shipctl to abstract this out
-# if you dont want to do this, hard code the imageName and tag, rather than making
-# it dynamic
-# Basically, this is getting the boot script of next task, then injecting the
-# env vars after the shebang line
-            - ALP_IMG=$(shipctl get_resource_version_key build_alpine_ci_img_dh "sourceName")
-            - ALP_IMG_TAG=$(shipctl get_resource_version_key build_alpine_ci_img_dh "versionName")
-            - NEXT_BOOT_SCRIPT_PATH="$BUILD_DIR/scripts/yml_boot_1.sh"
-            - NEXT_BOOT_SCRIPT_WITHOUT_SHEBANG=$(cat $NEXT_BOOT_SCRIPT_PATH | tail -n +2)
-            - |
-              echo "#!/bin/bash -e
-              export ALP_IMG=$ALP_IMG
-              export ALP_IMG_TAG=$ALP_IMG_TAG
-              $NEXT_BOOT_SCRIPT_WITHOUT_SHEBANG
-              " > $NEXT_BOOT_SCRIPT_PATH
-      - TASK:
           name: test_image
           runtime:
             options:
-              imageName: $ALP_IMG
-              imageTag: $ALP_IMG_TAG
+              imageName: manishas/build_alpine_ci
+              imageTag: latest
           script:
             - python -V
     flags:
